@@ -18,8 +18,8 @@ def extract(infiles, outfile):
         pre = np.mean(pre, 0)   #Average over arrays
     pre = np.mean(pre, 0, keepdims=True)   #Average over time
 
-    h = data.shape[0]
-    w = data.shape[1]
+    h = pre.shape[1]
+    w = pre.shape[2]
     new = ds(outfile, 'w', format='NETCDF4')
     lat = new.createDimension('lat', h)
     lon = new.createDimension('lon', w)
@@ -27,7 +27,7 @@ def extract(infiles, outfile):
     lats = new.createVariable('lat','f4',('lat'))
     lons = new.createVariable('lon','f4',('lon'))
     times = new.createVariable('time','u1', ('time'))
-    pr = nc.createVariable('pr','f8',('lat','lon'))
+    pr = new.createVariable('pr','f4',('lat','lon'))
     pr.units = 'm/s'
 
     #Leaving this in here for personal use
@@ -38,7 +38,7 @@ def extract(infiles, outfile):
     lats[:] = np.linspace(90-hst,-90+hst,h)
     lons[:] = np.linspace(-180-wst,180+wst,w)
     times[:] = [1]
-    pr[:] = pre[:]
+    pr[:,:] = pre
     new.close
     return
     
