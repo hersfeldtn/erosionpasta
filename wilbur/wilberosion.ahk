@@ -118,6 +118,7 @@
 		;Save surface as a 16-bit .png file with name x
 		savepng(x)
 		{
+			Sleep speed*10
 			Send "^s"
 			WinWait("Select File As")
 			Sleep speed*10
@@ -1030,9 +1031,6 @@
 
 
 ;Basic Functions
-	;pause function
-	^p::Pause
-
 	;exit function
 	^x::ExitApp
 
@@ -1106,7 +1104,7 @@
 		return
 	}
 	;or control-numbers for individual passes
-	^s::
+	^p::
 	{
 		prelim(true)
 	}
