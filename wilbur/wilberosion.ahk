@@ -29,11 +29,11 @@
 				If WinExist("Map Information")
 				{
 					Sleep speed*10
-					Send "{Enter}"
+					Send "{Tab}{Tab{Tab}{Tab}{Tab}{Enter}"
 					Break
 				}				
 				Else
-					Send "{Click}{Left}{Left}{Enter}"
+					Send "{Click}{Left}{Left}{Down}{Enter}"
 			}
 			Sleep speed*10
 			return
@@ -121,8 +121,10 @@
 			Sleep speed*10
 			Send "^s"
 			WinWait("Select File As")
-			Sleep speed*10
-			Send x . "{Tab}{Down}"
+			Sleep speed*100
+			Send x
+			Sleep speed*100
+			Send "{Tab}{Down}"
 			Loop 35
 			{
 				Send "{Up}"
@@ -149,8 +151,10 @@
 		{
 			Send "^s"
 			WinWait("Select File As")
-			Sleep speed*10
-			Send x . "{Tab}{Down}"
+			Sleep speed*100
+			Send x
+			Sleep speed*100
+			Send "{Tab}{Down}"
 			Loop 35
 			{
 				Send "{Up}"
@@ -176,7 +180,6 @@
 			return
 		}
 	;Edit
-		;Note for all of these that the "checkact" step at the end of every other function counts as an action for counting undo/redo steps
 		;undo x actions (1 by default)
 		undo(x:=1)
 		{
@@ -185,6 +188,7 @@
 				Send "^z"
 				Sleep speed*100
 			}
+			checkact(1)
 			return
 		}
 		;redo x actions (1 by default)
@@ -195,6 +199,7 @@
 				Send "^y"
 				Sleep speed*100
 			}
+			checkact(1)
 			return
 		}
 		;Fade to Prior
@@ -303,8 +308,10 @@
 		{
 			Send "{Click}{Left}{Up}{Enter}"
 			WinWait("Select File As")
-			Sleep speed*10
-			Send x . "{Tab}{Down}{Down}{Down}{Down}{Up}{Enter}{Enter}"
+			Sleep speed*100
+			Send x
+			Sleep speed*100
+			Send "{Tab}{Down}{Down}{Down}{Down}{Up}{Enter}{Enter}"
 			WinWait("Confirm Save As", , speed*5)
 			If WinExist("Confirm Save As")
 			{
@@ -485,21 +492,40 @@
 			return
 		}
 		;save a selection mask as a png with name x
-		savesel(x)
+		;if ch = true, can allow for not actually having a selection
+		savesel(x, ch:=true)
 		{
 			Send "{Click}{Up}{Enter}"
-			WinWait("Save Selection to File")
-			Sleep speed*10
-			Send x . "{Tab}{Down}{Up}{Up}{Down}{Enter}{Enter}"
-			WinWait("Confirm Save As", , speed*5)
-			If WinExist("Confirm Save As")
+			WinWait("Save Selection to File", , 10*speed)
+			if (ch)
 			{
-					Send "{Tab}{Enter}"
-					winclose("Confirm Save As")
+				if WinExist("Save Selection to File")
+					res := true
+				else
+					res := false
 			}
-			winclose("Save Selection to File")
+			else
+			{
+				res := true
+				WinWait("Save Selection to File")
+			}
+			if (res)
+			{
+				Sleep speed*100
+				Send x
+				Sleep speed*100
+				Send "{Tab}{Down}{Up}{Up}{Down}{Enter}{Enter}"
+				WinWait("Confirm Save As", , speed*5)
+				If WinExist("Confirm Save As")
+				{
+						Sleep speed*10
+						Send "{Tab}{Enter}"
+						winclose("Confirm Save As")
+				}
+				winclose("Save Selection to File")
+			}
 			checkact(1)
-			return
+			return res
 		}
 	;Filter
 		;Blur
@@ -733,7 +759,7 @@
 			;x for first value (Scale Factor if w=0, High if w=1, Highest if w=2)
 			;y for second value (Break if w=1, Lowest if w=2)
 			;z for Low (if w=1)
-			scale(w,x,y:=0,z:=0)
+			scaleto(w,x,y:=0,z:=0)
 			{
 				Send "{Click}{Right}{Down}{Down}{Down}{Down}{Down}{Right}{Up}{Up}{Enter}"
 				WinWait("Surface Scaling")
@@ -1024,7 +1050,7 @@
 			Send "^c"
 			Sleep speed*100
 			Send "{Esc}"
-			winclose("Threshold (Posterization)")
+			winclose("Histogram")
 			checkact(1)
 			return A_Clipboard
 		}
@@ -1036,43 +1062,140 @@
 
 ;Example
 ;For this to work properly, there needs to be an existing selection mask called "noise.png" (doesn't matter what specifically is on it) in the directory.
-	;Erode cycle used several times in script
-	erodecycle(noi, a1,b1,c1,d1, pre, med:=false, ext:=false, a2:=0,b2:=0,c2:=0,d2:=0)
+	;fills basins but with various procedures for dealing with basins and lakes
+	fillfull(noi:=0, lakes:=true)
 	{
-		fill()
-		noiseabs(noi)
-		fill()
-		incise(a1,b1,c1,,,d1)
-		if (ext)
+		if (endo)
 		{
-			incise(a2,b2,c2,,,d2)
+			loadsel("basins.bmp")
+			offset(-5*elmax)
+			desel()
 		}
-		if (pre > 0)
+		if (lakeauto && lakes)
 		{
-			precip(pre)
+			savemdr("autosave")
+			offset(100)
+			selbasin()
+			if (scale > 2)
+				contract(3)
+			else
+				contract(2)
+			haslake := savesel("autolakes")
+			if (haslake)
+			{
+				offset(-5*elmax)
+				selinv()
+				fill()
+				selinv()
+				offset(5*elmax)
+				desel()
+				selbasin()
+				haslake := savesel("autolakes")
+			}
+			offset(-100)
+			global haslake
+			desel()
 		}
-		if(med)
+		fill()
+		if (noi > 0)
 		{
-			median()
+			noiseabs(noi)
+		}
+		fill()
+		if (endo)
+		{
+			loadsel("basins.bmp")
+			offset(5*elmax)
+			desel()
+		}
+		if (lakeauto)
+		return
+	}
+	;Function after incise flow to push lakes down again
+	postfill()
+	{
+		if (lakeauto && haslake)
+		{
+			loadsel("autolakes.png")
+			openmdr("autosave.mdr")
+			desel()
 		}
 		return
 	}
+	
+	;function to interpret epasta.cfg
+	interpret()
+	{
+		speed := 1
+		scale := 2
+		endo := false
+		lakeauto := false
+		glacial := false
+		if FileExist("epasta.cfg")
+		{
+			Loop Read "epasta.cfg"
+			{
+				arr := StrSplit(A_LoopReadLine)
+				if (arr.length < 1 || arr[1] = "#")
+					continue
+				fline := StrSplit(A_LoopReadLine, "#")
+				line := fline[1]
+				words := StrSplit(line, "=", A_Space)
+				if (words.length > 0)
+				{
+					if (words[1] = "speed")
+					{
+						speed := Integer(words[2])
+					} else if (words[1] = "scale")
+					{
+						scale := Integer(4/words[2])
+					} else if (words[1] = "endo")
+					{
+						if (words[2] = "1")
+							endo := true
+						else
+							endo := false
+					} else if (words[1] = "lakes")
+					{
+						if (words[2] = "1")
+							lakeauto := true
+						else
+							lakeauto := false
+					} else if (words[1] = "glacial")
+					{
+						if (words[2] = "1")
+							glacial := true
+						else
+							glacial := false
+					}
+				}
+			}
+		}
+		global speed
+		global scale
+		global endo
+		global lakeauto
+		global glacial
+	}
+	
 	;startup function
 	startup()
 	{
 		;Initial setup
 		starttime:=A_Now
 		global starttime
-		;These steps are critical to ensure proper function of any script and should always be included:
-			speed := 1
-			global speed
-			checksel("noise.png")
-			desel()
+		interpret()
+		checksel("noise.png")
+		desel()
 		undolev(20)
 		xres := getres(0)
 		yres := getres(1)
+		elmin := getext(0)
+		elmax := getext(1)
 		global xres
 		global yres
+		global elmin
+		global elmax
 		resize(ceil(yres/2),ceil(-1*xres/2),ceil(xres/2),ceil(-yres/2))
 		return
 	}
@@ -1087,7 +1210,12 @@
 			Operation Began
 			" . starttime . "
 			Operation Completed
-			" . A_Now
+			" . A_Now . "
+			Options :
+			speed: " . speed . "
+			endo basins: " . endo . "
+			lakes: " . lakeauto . "
+			glacial: " . glacial
 		)
 		return
 	}
@@ -1098,6 +1226,8 @@
 		prelim()
 		pass1()
 		pass2()
+		if (glacial = true)
+			glac()
 		pass3()
 		pass4()
 		endmes('full run')
@@ -1116,6 +1246,10 @@
 	{
 		pass2(true)
 	}
+	^g::
+	{
+		glac(true)
+	}
 	^3::
 	{
 		pass3(true)
@@ -1130,35 +1264,45 @@
 	{
 		startup()
 		;produce noise map
-			noisefract(,,Round(xres/100),Round(yres/100))
-			noisefract(,3,Round(xres/50),Round(yres/50))
-			noisefract(,3,Round(xres/25),Round(yres/25))
-			noisefract(,3,Round(xres/10),Round(yres/10))
-			exponent(0.6,0.6)
-			noisefract(,3,Round(xres/3),Round(yres/3),0.5)
+			noisefract(,,Round(xres/(scale*50)),Round(yres/(scale*50)))
+			noisefract(,3,Round(xres/(scale*25)),Round(yres/(scale*25)))
+			noisefract(,3,Round(xres/(scale*12)),Round(yres/(scale*12)))
+			noisefract(,3,Round(xres/(scale*5)),Round(yres/(scale*5)))
 			exponent(0.5,0.5)
+			noisefract(,3,Round(xres/(scale*2)),Round(yres/(scale*2)),0.2)
+			exponent(0.6,0.6)
 			savepng("noise")
-			undo(16)
+			if (lakeauto)
+				savepng("autolakes")
+			undo(18)
 		;Initial erosion
 			noiseabs(10)
-			precip(3)
-			fill()
+			precip(2)
+			if (scale > 1)
+				precip(1)
+			if (scale > 2)
+				precip(2)
+			fillfull(0,false)
 		;Apply noise to break up slopes
-			selflat(0.25)
+			selflat(0.5/scale)
 			selinv()
-			feather(5)
-			apply("noise.png",0.3,0.9,3)
+			feather(2*scale)
+			apply("noise.png",0.15,0.95,3)
 			desel()
 			precip(2)
+			if (scale > 2)
+				precip(2)
 			median()
 		;Apply noise to over-flat areas
-			fill()
-			selflat(0.01)
-			feather(2)
+			fillfull(0,false)
+			selflat(0.03/scale)
+			feather(scale)
 			selheight(,,,2)
 			apply("noise.png",0.05,1,3)
 			desel()
 			precip(2)
+			if (scale > 2)
+				precip(2)
 			median()
 		if (start)
 		{
@@ -1174,7 +1318,25 @@
 		{
 			startup()
 		}
-		erodecycle(50, 2,0.2,0.2,0.5, 2)
+		fillfull(50)
+
+		desel()
+		fillfull(50, false)
+		incise(2,0.2,0.2,,,0.25*scale)
+		selflat(1/scale)
+		expand(2)
+		if (scale > 2)
+			expand(1)
+		contract(3*scale)
+		feather(3*scale)
+		incise(0.4,0.7,0.3,,,3*scale)
+		desel()
+		postfill()
+		precip(2)
+		;if (scale > 2)
+		;	precip(1)
+		if (scale > 2)
+			precip(2)
 		if (start)
 		{
 			endmes('first erosion cycle')
@@ -1189,16 +1351,19 @@
 		{
 			startup()
 		}
-		fill()
-		noiseabs(10)
-		fill()
-		selflat(2)
+		fillfull(10)
+		selflat(4/scale)
 		selinv()
-		feather(2)
-		erodecycle(1, 10,0.3,0.2,0.5, 0)
+		feather(scale)
+		incise(10,0.3,0.2,,,0.25*scale)
 		erode()
 		desel()
-		precip(3)
+		postfill()
+		precip(2)
+		;if (scale > 2)
+		;	precip(1)
+		if (scale > 2)
+			precip(1)
 		selheight()
 		selinv()
 		blur()
@@ -1210,6 +1375,48 @@
 		return
 	}
 	
+	;Optional glacial erosion
+	glac(start:=false)
+	{
+		if (start)
+			startup()
+		fillfull(1)
+		loadsel("glacial.bmp")
+		incise(5,0.5,1,,,0)
+		postfill()
+		desel()
+		offset(1000)
+		if (endo)
+		{
+			loadsel("basins.bmp")
+			offset(-5*elmax)
+			desel()
+		}
+		loadsel("glacial.bmp")
+		fill()
+		noiseabs(10)
+		fill()
+		desel()
+		if (endo)
+		{
+			loadsel("basins.bmp")
+			offset(5*elmax)
+			desel()
+		}
+		loadsel("glacial.bmp")
+		incise(10,0.6,0.6,,,0.5*scale)
+		desel()
+		offset(-1000)
+		exponent(2,2,,2,-10000,10000)
+		loadsel("glacial.bmp")
+		offset(-400)
+		desel()
+		exponent(0.5,0.5,,2,-10000,10000)
+		if(start)
+			endmes('glacial erosion')
+		return
+	}
+	
 	;Third erosion cycle
 	pass3(start:=false)
 	{
@@ -1217,9 +1424,24 @@
 		{
 			startup()
 		}
-		erodecycle(5, 2,0.3,0.4,0, 3, false, true, 5,0.6,0.4,0)
-		selheight()
-		selinv()
+		fillfull(5)
+		incise(2,0.3,0.4,,,0)
+		incise(5,0.6,0.4,,,0)
+		postfill()
+		precip(1)
+		;if (scale > 2)
+		;	precip(1)
+		if (scale > 2)
+			precip(1)
+		if (glacial)
+		{
+			loadsel("glacial.bmp")
+			selinv()
+		} else
+		{
+			selall()
+		}
+		selheight(-10000000000000000,0,1,2)
 		blur()
 		desel()
 		if (start)
@@ -1236,12 +1458,22 @@
 		{
 			startup()
 		}
-		erodecycle(5, 1,0.5,0.5,0, 2, true, true, 2,0.8,0.5,0)
+		fillfull(5)
+		incise(1,0.5,0.5,,,0)
+		incise(2,0.8,0.5,,,0)
+		postfill()
+		precip(1)
+		if (scale > 2)
+			precip(1)
+		if (scale > 2)
+			precip(1)
+		median()
 		selheight()
 		selinv()
 		blur()
 		desel()
-		fill()
+		fillfull(0)
+		postfill()
 		if (start)
 		{
 			endmes('final erosion')
